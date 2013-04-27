@@ -70,8 +70,8 @@ public:
     UByte               MoveRight;
     Vector3f            GamepadMove, GamepadRotate;
 
-	Player(void);
-	~Player(void);
+	Player();
+	~Player();
 	void HandleCollision(double dt, Array<Ptr<CollisionModel> >* collisionModels,
 		                 Array<Ptr<CollisionModel> >* groundCollisionModels, bool shiftDown);
 };

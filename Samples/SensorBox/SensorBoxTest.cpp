@@ -340,7 +340,8 @@ void InputTestApp::SetView(ViewType type)
                                   Vector3f(0.0f,  0.0f, 1.0f));
         
         break;
-
+        default:
+            break;
     }
 
     Proj = Matrix4f::PerspectiveRH(DegreeToRad(70.0f), 1280 / (float)800,
@@ -438,7 +439,9 @@ void InputTestApp::OnKey(KeyCode key, int chr, bool down, int modifiers)
             OriAdjust = OriSensor.Conj();
             Sc.ViewPoint.SetOrientation(Quatf());
         }
-        break; */   
+        break; */
+        default:
+            break;
     }
 }
 

@@ -31,6 +31,7 @@ limitations under the License.
 
 namespace OVR { namespace Render {
     class RenderDevice;
+    struct DisplayId;
 }}
 
 namespace OVR { namespace Platform { namespace Win32 {
@@ -79,10 +80,10 @@ public:
 
     void      SetWindowTitle(const char*title);
 	void	  PlayMusicFile(const char *fileName);
-    int       GetScreenCount();
-    String    GetScreenName(int screen);
+    int       GetDisplayCount();
+    Render::DisplayId    GetDisplay(int screen);
 
-    int        Run();
+    int       Run();
 };
 
 

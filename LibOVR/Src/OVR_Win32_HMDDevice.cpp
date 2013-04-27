@@ -15,8 +15,8 @@ otherwise accompanies this software in either electronic or hard copy form.
 
 #include "OVR_Win32_HMDDevice.h"
 
-// Needed to tag sensor as having HMD coordinates.
-#include "OVR_Win32_Sensor.h"
+#include "OVR_Win32_DeviceManager.h"
+
 #include <tchar.h>
 
 namespace OVR { namespace Win32 {
@@ -324,7 +324,7 @@ bool HMDDeviceCreateDesc::GetDeviceInfo(DeviceInfo* info) const
         hmdInfo->VScreenSize            = VScreenSize;
         hmdInfo->VScreenCenter          = VScreenSize * 0.5f;
         hmdInfo->InterpupillaryDistance = 0.064f;  // Default IPD; should be configurable.
-        hmdInfo->LensSeparationDistance = 0.064f;
+        hmdInfo->LensSeparationDistance = 0.0635f;
 
         if (Contents & Contents_Distortion)
         {
@@ -339,6 +339,11 @@ bool HMDDeviceCreateDesc::GetDeviceInfo(DeviceInfo* info) const
                 hmdInfo->DistortionK[1]      = 0.22f;
                 hmdInfo->DistortionK[2]      = 0.24f;
                 hmdInfo->EyeToScreenDistance = 0.041f;
+
+                hmdInfo->ChromaAbCorrection[0] = 0.996f;
+                hmdInfo->ChromaAbCorrection[1] = -0.004f;
+                hmdInfo->ChromaAbCorrection[2] = 1.014f;
+                hmdInfo->ChromaAbCorrection[3] = 0.0f;
             }
             else
             {
@@ -385,8 +390,6 @@ OVR::SensorDevice* HMDDevice::GetSensor()
         sensor->SetCoordinateFrame(SensorDevice::Coord_HMD);
     return sensor;
 }
-
-
 
 }} // namespace OVR::Win32
 

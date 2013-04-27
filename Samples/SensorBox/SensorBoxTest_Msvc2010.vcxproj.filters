@@ -58,4 +58,7 @@
       <Filter>CommonSrc\Render</Filter>
     </ClInclude>
   </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="SensorBoxTest.rc" />
+  </ItemGroup>
 </Project>

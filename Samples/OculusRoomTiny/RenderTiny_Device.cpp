@@ -186,8 +186,10 @@ RenderDevice::RenderDevice()
     : CurPostProcess(PostProcess_None),
       SceneColorTexW(0), SceneColorTexH(0),
       SceneRenderScale(1),      
-      Distortion(1.0f, 0.18f, 0.115f)
+      Distortion(1.0f, 0.18f, 0.115f),
+      PostProcessShaderActive(PostProcessShader_DistortionAndChromAb)
 {
+    PostProcessShaderRequested = PostProcessShaderActive;
 }
 
 ShaderFill* RenderDevice::CreateTextureFill(RenderTiny::Texture* t)
@@ -242,6 +244,35 @@ bool RenderDevice::initPostProcessSupport(PostProcessType pptype)
     if (pptype != PostProcess_Distortion)
         return true;
 
+
+    if (PostProcessShaderRequested !=  PostProcessShaderActive)
+    {
+        pPostProcessShader.Clear();
+        PostProcessShaderActive = PostProcessShaderRequested;
+    }
+
+    if (!pPostProcessShader)
+    {
+        Shader *vs   = LoadBuiltinShader(Shader_Vertex, VShader_PostProcess);
+
+        Shader *ppfs = NULL;
+        if (PostProcessShaderActive == PostProcessShader_Distortion)
+        {
+            ppfs = LoadBuiltinShader(Shader_Fragment, FShader_PostProcess);
+        }
+        else if (PostProcessShaderActive == PostProcessShader_DistortionAndChromAb)
+        {
+            ppfs = LoadBuiltinShader(Shader_Fragment, FShader_PostProcessWithChromAb);
+        }
+        else
+            OVR_ASSERT(false);
+    
+        pPostProcessShader = *CreateShaderSet();
+        pPostProcessShader->SetShader(vs);
+        pPostProcessShader->SetShader(ppfs);
+    }
+
+
     int texw = (int)ceil(SceneRenderScale * WindowWidth),
         texh = (int)ceil(SceneRenderScale * WindowHeight);
 
@@ -262,14 +293,6 @@ bool RenderDevice::initPostProcessSupport(PostProcessType pptype)
     SceneColorTexH = texh;
     pSceneColorTex->SetSampleMode(Sample_ClampBorder | Sample_Linear);
 
-    if (!pPostProcessShader)
-    {
-        Shader *vs   = LoadBuiltinShader(Shader_Vertex, VShader_PostProcess);
-        Shader *ppfs = LoadBuiltinShader(Shader_Fragment, FShader_PostProcess);
-        pPostProcessShader = *CreateShaderSet();
-        pPostProcessShader->SetShader(vs);
-        pPostProcessShader->SetShader(ppfs);
-    }
 
     if (!pFullScreenVertexBuffer)
     {
@@ -359,6 +382,16 @@ void RenderDevice::FinishScene1()
 
     pPostProcessShader->SetUniform4f("HmdWarpParam",
                                      Distortion.K[0], Distortion.K[1], Distortion.K[2], Distortion.K[3]);
+
+    if (PostProcessShaderRequested == PostProcessShader_DistortionAndChromAb)
+    {
+        pPostProcessShader->SetUniform4f("ChromAbParam",
+                                        Distortion.ChromaticAberration[0], 
+                                        Distortion.ChromaticAberration[1],
+                                        Distortion.ChromaticAberration[2],
+                                        Distortion.ChromaticAberration[3]);
+    }
+
     Matrix4f texm(w, 0, 0, x,
                   0, h, 0, y,
                   0, 0, 0, 0,

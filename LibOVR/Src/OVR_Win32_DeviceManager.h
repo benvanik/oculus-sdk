@@ -17,7 +17,6 @@ otherwise accompanies this software in either electronic or hard copy form.
 #define OVR_Win32_DeviceManager_h
 
 #include "OVR_DeviceImpl.h"
-#include "OVR_Win32_HID.h"
 #include "OVR_Win32_DeviceStatus.h"
 
 #include "Kernel/OVR_Timer.h"
@@ -46,7 +45,6 @@ public:
 
     virtual bool  GetDeviceInfo(DeviceInfo* info) const;
 
-    Win32HIDInterface        HIDInterface;
     Ptr<DeviceManagerThread> pThread;
 };
 
@@ -88,8 +86,10 @@ public:
 		};
 
 		// Called to notify device object.
-		virtual bool    OnDeviceMessage(DeviceMessageType messageType, const String& devicePath) 
-        { OVR_UNUSED2(messageType, devicePath); return false; }
+		virtual bool    OnDeviceMessage(DeviceMessageType messageType, 
+										const String& devicePath,
+										bool* error) 
+        { OVR_UNUSED3(messageType, devicePath, error); return false; }
     };
 
  
@@ -105,7 +105,8 @@ public:
 	bool AddMessageNotifier(Notifier* notify);
 	bool RemoveMessageNotifier(Notifier* notify);
 
-	void OnMessage(MessageType type, const String& devicePath);
+    // DeviceStatus::Notifier interface.
+	bool OnMessage(MessageType type, const String& devicePath);
 
 private:
     bool threadInitialized() { return hCommandEvent != 0; }

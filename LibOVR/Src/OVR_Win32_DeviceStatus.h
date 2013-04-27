@@ -19,6 +19,7 @@ otherwise accompanies this software in either electronic or hard copy form.
 #include <windows.h>
 #include "Kernel/OVR_String.h"
 #include "Kernel/OVR_RefCount.h"
+#include "Kernel/OVR_Array.h"
 
 namespace OVR { namespace Win32 {
 
@@ -45,8 +46,8 @@ public:
 			DeviceRemoved   = 1,
 		};
 
-		virtual void OnMessage(MessageType type, const String& devicePath) 
-        { OVR_UNUSED2(type, devicePath); }
+		virtual bool OnMessage(MessageType type, const String& devicePath) 
+        { OVR_UNUSED2(type, devicePath); return true; }
 	};
 
 	DeviceStatus(Notifier* const pClient);
@@ -60,17 +61,37 @@ public:
 	void ProcessMessages();
 
 private:	
-	Notifier* const     pNotificationClient;	// Don't reference count a back-pointer.
-
-	HWND                hMessageWindow;
-	HDEVNOTIFY          hDeviceNotify;
+    enum 
+    { 
+        MaxUSBRecoveryAttempts  = 20,
+        USBRecoveryTimeInterval = 500   // ms
+    };
+    struct RecoveryTimerDesc
+    {
+        UINT_PTR    TimerId;
+        String      DevicePath;
+        unsigned    NumAttempts;
+    };
 
 	static LRESULT CALLBACK WindowsMessageCallback( HWND hwnd, 
                                                     UINT message, 
                                                     WPARAM wParam, 
                                                     LPARAM lParam);
 
-	void MessageCallback(WORD messageType, const String& devicePath);
+	bool MessageCallback(WORD messageType, const String& devicePath);
+
+    void CleanupRecoveryTimer(UPInt index);
+    RecoveryTimerDesc* FindRecoveryTimer(UINT_PTR timerId, UPInt* pindex);
+    void FindAndCleanupRecoveryTimer(const String& devicePath);
+
+private: // data
+    Notifier* const     pNotificationClient;	// Don't reference count a back-pointer.
+
+    HWND                hMessageWindow;
+    HDEVNOTIFY          hDeviceNotify;
+
+    UINT_PTR            LastTimerId;
+    Array<RecoveryTimerDesc> RecoveryTimers;
 };
 
 }} // namespace OVR::Win32

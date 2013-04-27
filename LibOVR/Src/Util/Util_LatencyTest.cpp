@@ -23,6 +23,7 @@ namespace OVR { namespace Util {
 static const UInt32     TIME_TO_WAIT_FOR_SETTLE_PRE_CALIBRATION = 16*10;
 static const UInt32     TIME_TO_WAIT_FOR_SETTLE_POST_CALIBRATION = 16*10;
 static const UInt32     TIME_TO_WAIT_FOR_SETTLE_POST_MEASUREMENT = 16*5;
+static const UInt32     TIME_TO_WAIT_FOR_SETTLE_POST_MEASUREMENT_RANDOMNESS = 16*5;
 static const UInt32     DEFAULT_NUMBER_OF_SAMPLES = 10;                 // For both color 1->2 and color 2->1 transitions.
 static const UInt32     INITIAL_SAMPLES_TO_IGNORE = 4;
 static const UInt32     TIMEOUT_WAITING_FOR_TEST_STARTED = 1000;
@@ -47,6 +48,8 @@ LatencyTest::LatencyTest(LatencyTestDevice* device)
     }
 
     reset();
+
+    srand(Timer::GetTicksMs());
 }
 
 LatencyTest::~LatencyTest()
@@ -86,6 +89,12 @@ bool LatencyTest::SetDevice(LatencyTestDevice* device)
     }
 
     return true;
+}
+
+UInt32 LatencyTest::getRandomComponent(UInt32 range)
+{
+    UInt32 val = rand() % range;
+    return val;
 }
 
 void LatencyTest::handleMessage(const Message& msg, LatencyTestMessageType latencyTestMessage)
@@ -148,7 +157,8 @@ void LatencyTest::handleMessage(const Message& msg, LatencyTestMessageType laten
             State = State_WaitingForSettlePostMeasurement;
             OVR_DEBUG_LOG(("State_WaitingForSettlePostCalibrationColorWhite -> State_WaitingForSettlePostMeasurement."));
 
-            setTimer(TIME_TO_WAIT_FOR_SETTLE_POST_MEASUREMENT);
+            UInt32 waitTime = TIME_TO_WAIT_FOR_SETTLE_POST_MEASUREMENT + getRandomComponent(TIME_TO_WAIT_FOR_SETTLE_POST_MEASUREMENT_RANDOMNESS);
+            setTimer(waitTime);
         }
         else if (State == State_WaitingForSettlePostMeasurement)
         {
@@ -170,7 +180,8 @@ void LatencyTest::handleMessage(const Message& msg, LatencyTestMessageType laten
             OVR_DEBUG_LOG(("** Timed out waiting for 'TestStarted'."));
             OVR_DEBUG_LOG(("State_WaitingForTestStarted -> State_WaitingForSettlePostMeasurement."));
 
-            setTimer(TIME_TO_WAIT_FOR_SETTLE_POST_MEASUREMENT);
+            UInt32 waitTime = TIME_TO_WAIT_FOR_SETTLE_POST_MEASUREMENT + getRandomComponent(TIME_TO_WAIT_FOR_SETTLE_POST_MEASUREMENT_RANDOMNESS);
+            setTimer(waitTime);
         }
         else if (State == State_WaitingForColorDetected)
         {
@@ -181,7 +192,8 @@ void LatencyTest::handleMessage(const Message& msg, LatencyTestMessageType laten
             OVR_DEBUG_LOG(("** Timed out waiting for 'ColorDetected'."));
             OVR_DEBUG_LOG(("State_WaitingForColorDetected -> State_WaitingForSettlePostMeasurement."));
 
-            setTimer(TIME_TO_WAIT_FOR_SETTLE_POST_MEASUREMENT);
+            UInt32 waitTime = TIME_TO_WAIT_FOR_SETTLE_POST_MEASUREMENT + getRandomComponent(TIME_TO_WAIT_FOR_SETTLE_POST_MEASUREMENT_RANDOMNESS);
+            setTimer(waitTime);
         }
     }
     else if (latencyTestMessage == LatencyTest_ProcessInputs)
@@ -263,7 +275,8 @@ void LatencyTest::handleMessage(const Message& msg, LatencyTestMessageType laten
                 State = State_WaitingForSettlePostMeasurement;
                 OVR_DEBUG_LOG(("State_WaitingForColorDetected -> State_WaitingForSettlePostMeasurement."));
 
-                setTimer(TIME_TO_WAIT_FOR_SETTLE_POST_MEASUREMENT);
+                UInt32 waitTime = TIME_TO_WAIT_FOR_SETTLE_POST_MEASUREMENT + getRandomComponent(TIME_TO_WAIT_FOR_SETTLE_POST_MEASUREMENT_RANDOMNESS);
+                setTimer(waitTime);
             }
         }
     }

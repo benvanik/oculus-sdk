@@ -114,6 +114,9 @@
     <ClInclude Include="..\CommonSrc\Render\Render_D3D11_Device.h" />
     <ClInclude Include="..\CommonSrc\Render\Render_D3D1X_Device.h" />
   </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="SensorBoxTest.rc" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

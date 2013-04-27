@@ -23,13 +23,12 @@ otherwise accompanies this software in either electronic or hard copy form.
 
 #include "Kernel/OVR_Threads.h"
 #include "OVR_ThreadCommandQueue.h"
-
+#include "OVR_HIDDevice.h"
 
 namespace OVR {
     
 class DeviceManagerImpl;
 class DeviceFactory;
-
 
 //-------------------------------------------------------------------------------------
 // Globally shared Lock implementation used for MessageHandlers.
@@ -227,11 +226,8 @@ public:
     {
     }
 
-    // Convenience method to avoid manager access typecasts.
-    DeviceManagerImpl*  GetManagerImpl() const      
-    {
-        return pCreateDesc->pLock->pManager;
-    }
+	// Convenience method to avoid manager access typecasts.
+    DeviceManagerImpl*  GetManagerImpl() const      { return pCreateDesc->pLock->pManager; }
 
     // Inline to avoid warnings.
     DeviceImpl*         getThis()                   { return this; }
@@ -364,12 +360,21 @@ public:
     virtual Void EnumerateAllFactoryDevices();
     // Enumerates devices for a particular factory.
     virtual Void EnumerateFactoryDevices(DeviceFactory* factory);
-    
+
+    virtual HIDDeviceManager* GetHIDDeviceManager()
+    {
+        return HidDeviceManager;
+    }
+
+
     // Manager Lock-protected list of devices.
-    List<DeviceCreateDesc> Devices;    
+    List<DeviceCreateDesc>  Devices;    
 
     // Factories used to detect and manage devices.
-    List<DeviceFactory>   Factories;
+    List<DeviceFactory>     Factories;
+
+protected:
+    Ptr<HIDDeviceManager>   HidDeviceManager;
 };
 
 

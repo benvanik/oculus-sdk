@@ -276,7 +276,7 @@ bool    FILEFile::IsRecoverable()
 // Return position / file size
 int     FILEFile::Tell()
 {
-    int pos = ftell (fs);
+    int pos = (int)ftell (fs);
     if (pos < 0)
         ErrorCode = SFerror();
     return pos;
@@ -284,7 +284,7 @@ int     FILEFile::Tell()
 
 SInt64  FILEFile::LTell()
 {
-    int pos = ftell(fs);
+    SInt64 pos = ftell(fs);
     if (pos < 0)
         ErrorCode = SFerror();
     return pos;
@@ -304,7 +304,15 @@ int     FILEFile::GetLength()
 }
 SInt64  FILEFile::LGetLength()
 {
-    return GetLength();
+    SInt64 pos = LTell();
+    if (pos >= 0)
+    {
+        LSeek (0, Seek_End);
+        SInt64 size = LTell();
+        LSeek (pos, Seek_Set);
+        return size;
+    }
+    return -1;
 }
 
 int     FILEFile::GetErrorCode()

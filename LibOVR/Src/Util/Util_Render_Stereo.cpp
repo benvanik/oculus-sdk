@@ -83,7 +83,7 @@ StereoConfig::StereoConfig(StereoMode mode, const Viewport& vp)
     HMD.HScreenSize            = 0.14976f;
     HMD.VScreenSize            = HMD.HScreenSize / (1280.0f / 800.0f);
     HMD.InterpupillaryDistance = InterpupillaryDistance;
-    HMD.LensSeparationDistance = 0.064f;
+    HMD.LensSeparationDistance = 0.0635f;
     HMD.EyeToScreenDistance    = 0.041f;
     HMD.DistortionK[0]         = Distortion.K[0];
     HMD.DistortionK[1]         = Distortion.K[1];
@@ -109,6 +109,10 @@ void StereoConfig::SetHMDInfo(const HMDInfo& hmd)
     Distortion.K[1] = hmd.DistortionK[1];
     Distortion.K[2] = hmd.DistortionK[2];
     Distortion.K[3] = hmd.DistortionK[3];
+
+    Distortion.SetChromaticAberration(hmd.ChromaAbCorrection[0], hmd.ChromaAbCorrection[1],
+                                      hmd.ChromaAbCorrection[2], hmd.ChromaAbCorrection[3]);
+
     DirtyFlag = true;
 }
 
@@ -225,31 +229,13 @@ void StereoConfig::updateProjectionOffset()
 {
     // Post-projection viewport coordinates range from (-1.0, 1.0), with the
     // center of the left viewport falling at (1/4) of horizontal screen size.
-    // We need to shift this projection center to match with the eye center
-    // corrected by IPD. We compute this shift in physical units (meters) to
+    // We need to shift this projection center to match with the lens center;
+    // note that we don't use the IPD here due to collimated light property of the lens.
+    // We compute this shift in physical units (meters) to
     // correct for different screen sizes and then rescale to viewport coordinates.    
     float viewCenter         = HMD.HScreenSize * 0.25f;
-    float eyeProjectionShift = viewCenter - InterpupillaryDistance*0.5f;
-    ProjectionCenterOffset   = 4.0f * eyeProjectionShift / HMD.HScreenSize;    
-    
-    /*
-    // TBD.
-    // This more advanced logic attempts to correct IPD with distortion function.
-    // Generally works (produces same image regardless of FOV for different IPDs),
-    // however IPD==0 doesn't meet at the center as it should.
-    // Might be a problem with meters to distortion function units conversions (or back).
-    
-    float lensToIPD_m                    = (HMD.LensSeparationDistance - InterpupillaryDistance)/2;
-    float lensToIPD_du                   = (4.0f/HMD.HScreenSize) * lensToIPD_m; // distortion units
-    float preDistortLensToIPD_du         = Distortion.CalcScaleInverse(lensToIPD_du);
-    float preScalePreDistortLensToIPD_du = preDistortLensToIPD_du / Distortion.Scale;
-
-    float preScalePreDistortLensToIPD_m  = preScalePreDistortLensToIPD_du / (4.0f/HMD.HScreenSize);    
-    float lensToViewCenter_m             = HMD.HScreenSize * 0.25f - HMD.LensSeparationDistance * 0.5f;
-    float viewCenterToIPDPoint_m         = lensToViewCenter_m + preScalePreDistortLensToIPD_m;
-
-    ProjectionCenterOffset = 4.0f * viewCenterToIPDPoint_m / HMD.HScreenSize;
-    */
+    float eyeProjectionShift = viewCenter - HMD.LensSeparationDistance*0.5f;
+    ProjectionCenterOffset   = 4.0f * eyeProjectionShift / HMD.HScreenSize;
 }
 
 void StereoConfig::update2D()
@@ -259,12 +245,13 @@ void StereoConfig::update2D()
     // This introduces an extra off-center pixel projection shift based on eye distance.
     // This offCenterShift is the pixel offset of the other camera's center
     // in your reference camera based on surface distance.
-    float eyeDistanceScreenPixels = (HMD.HResolution / HMD.HScreenSize) * InterpupillaryDistance;
+    float metersToPixels          = (HMD.HResolution / HMD.HScreenSize);
+    float lensDistanceScreenPixels= metersToPixels * HMD.LensSeparationDistance;
+    float eyeDistanceScreenPixels = metersToPixels * InterpupillaryDistance;
     float offCenterShiftPixels    = (HMD.EyeToScreenDistance / 0.8f) * eyeDistanceScreenPixels;
-    float leftPixelCenter         = (HMD.HResolution / 2) - eyeDistanceScreenPixels / 2;
-    float rightPixelCenter        = eyeDistanceScreenPixels / 2;
+    float leftPixelCenter         = (HMD.HResolution / 2) - lensDistanceScreenPixels * 0.5f;
+    float rightPixelCenter        = lensDistanceScreenPixels * 0.5f;
     float pixelDifference         = leftPixelCenter - rightPixelCenter;
-
     
     // This computes the number of pixels that fit within specified 2D FOV (assuming
     // distortion scaling will be done).

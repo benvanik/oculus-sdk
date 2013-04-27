@@ -15,8 +15,8 @@ otherwise accompanies this software in either electronic or hard copy form.
 #define _OVR_VERSION_H
 
 #define OVR_MAJOR_VERSION 0
-#define OVR_MINOR_VERSION 1
-#define OVR_BUILD_VERSION 5
-#define OVR_VERSION_STRING "0.1.5"
+#define OVR_MINOR_VERSION 2
+#define OVR_BUILD_VERSION 1
+#define OVR_VERSION_STRING "0.2.1"
 
 #endif

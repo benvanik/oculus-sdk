@@ -39,10 +39,10 @@ limitations under the License.
         SetupGraphicsDeviceSet("D3D10", &OVR::Render::D3D10::RenderDevice::CreateDevice) )
 
 #elif defined(OVR_OS_MAC) && !defined(OVR_MAC_X11)
-  #include "MacOS_Platform.h"
+  #include "OSX_Platform.h"
 
   #define OVR_DEFAULT_RENDER_DEVICE_SET                                         \
-    SetupGraphicsDeviceSet("GL", &OVR::Render::GL::MacOS::RenderDevice::CreateDevice)
+    SetupGraphicsDeviceSet("GL", &OVR::Render::GL::OSX::RenderDevice::CreateDevice)
 
 #else
 

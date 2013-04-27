@@ -118,4 +118,4 @@ Texture* LoadTextureDDS(RenderDevice* ren, File* f)
 
 #ifdef OVR_DEFINE_NEW
 #define new OVR_DEFINE_NEW
-#endif#endif
+#endif

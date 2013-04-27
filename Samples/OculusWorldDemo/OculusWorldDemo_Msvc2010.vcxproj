@@ -199,6 +199,9 @@
     <ClInclude Include="..\CommonSrc\Render\Render_XmlSceneLoader.h" />
     <ClInclude Include="Player.h" />
   </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="OculusWorldDemo.rc" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

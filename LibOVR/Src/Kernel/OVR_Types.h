@@ -433,10 +433,13 @@ namespace BaseTypes
 //# define OVR_BUILD_DEBUG
 
 // OVR_DEBUG_STATEMENT injects a statement only in debug builds.
+// OVR_DEBUG_SELECT injects first argument in debug builds, second argument otherwise.
 #ifdef OVR_BUILD_DEBUG
-#define OVR_DEBUG_STATEMENT(s) s
+#define OVR_DEBUG_STATEMENT(s)   s
+#define OVR_DEBUG_SELECT(d, nd)  d
 #else
 #define OVR_DEBUG_STATEMENT(s)
+#define OVR_DEBUG_SELECT(d, nd)  nd
 #endif
 
 

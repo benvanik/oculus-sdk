@@ -48,7 +48,6 @@ OculusRoomTinyApp::OculusRoomTinyApp(HINSTANCE hinst)
       PostProcess(PostProcess_Distortion),
       ShiftDown(false),
       ControlDown(false)
-
 {
     pApp = this;
 
@@ -272,7 +271,6 @@ void OculusRoomTinyApp::OnMouseMove(int x, int y, int modifiers)
     }    
 }
 
-
 void OculusRoomTinyApp::OnKey(unsigned vk, bool down)
 {
     switch (vk)
@@ -300,6 +298,25 @@ void OculusRoomTinyApp::OnKey(unsigned vk, bool down)
         SFusion.Reset();
         break;
     
+    case 'P':
+        if (down)
+        {
+            // Toggle chromatic aberration correction on/off.
+            RenderDevice::PostProcessShader shader = pRender->GetPostProcessShader();
+
+            if (shader == RenderDevice::PostProcessShader_Distortion)
+            {
+                pRender->SetPostProcessShader(RenderDevice::PostProcessShader_DistortionAndChromAb);                
+            }
+            else if (shader == RenderDevice::PostProcessShader_DistortionAndChromAb)
+            {
+                pRender->SetPostProcessShader(RenderDevice::PostProcessShader_Distortion);                
+            }
+            else
+                OVR_ASSERT(false);
+        }
+        break;
+
     // Switch rendering modes/distortion.
     case VK_F1:
         SConfig.SetStereoMode(Stereo_None);

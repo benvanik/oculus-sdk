@@ -824,6 +824,19 @@ public:
     T       Length() const                  { return sqrt(x * x + y * y + z * z + w * w); }
     // Get quaternion length squared.
     T       LengthSq() const                { return (x * x + y * y + z * z + w * w); }
+    // Simple Eulidean distance in R^4 (not SLERP distance, but at least respects Haar measure)
+    T       Distance(const Quat& q) const
+    {
+        T d1 = (*this - q).Length();
+        T d2 = (*this + q).Length(); // Antipoldal point check
+        return (d1 < d2) ? d1 : d2;
+    }
+    T       DistanceSq(const Quat& q) const
+    {
+        T d1 = (*this - q).LengthSq();
+        T d2 = (*this + q).LengthSq(); // Antipoldal point check
+        return (d1 < d2) ? d1 : d2;
+    }
 
     // Normalize
     bool    IsNormalized() const            { return fabs(LengthSq() - 1) < Math<T>::Tolerance; }
@@ -832,7 +845,6 @@ public:
 
     // Returns conjugate of the quaternion. Produces inverse rotation if quaternion is normalized.
     Quat    Conj() const                    { return Quat(-x, -y, -z, w); }
-
 
     // AnnaSteve fixed: order of quaternion multiplication
     // Quaternion multiplication. Combines quaternion rotations, performing the one on the 

@@ -30,6 +30,7 @@ limitations under the License.
 
 namespace OVR { namespace Render {
     class RenderDevice;
+    struct DisplayId;
     struct RendererParams;
 }}
 
@@ -174,8 +175,8 @@ public:
 
     virtual void      SetWindowTitle(const char*title) = 0;
 	virtual void	  PlayMusicFile(const char *fileName) { OVR_UNUSED(fileName); }
-    virtual int       GetScreenCount() { return 0; }
-    virtual String    GetScreenName(int screen) { OVR_UNUSED(screen); return String(); }
+    virtual int       GetDisplayCount() { return 0; }
+    virtual Render::DisplayId GetDisplay(int screen);
     
     // Get time since start of application in seconds.
     double            GetAppTime() const; 

@@ -15,7 +15,7 @@ otherwise accompanies this software in either electronic or hard copy form.
 
 #include "OVR_Win32_DeviceStatus.h"
 
-#include "OVR_Win32_HID.h"
+#include "OVR_Win32_HIDDevice.h"
 
 #include "Kernel/OVR_Log.h"
 
@@ -27,7 +27,7 @@ static TCHAR windowClassName[] = TEXT("LibOVR_DeviceStatus_WindowClass");
 
 //-------------------------------------------------------------------------------------
 DeviceStatus::DeviceStatus(Notifier* const pClient)
-	: pNotificationClient(pClient)
+	: pNotificationClient(pClient), LastTimerId(0)
 {	
 }
 
@@ -74,13 +74,15 @@ bool DeviceStatus::Initialize()
 		return false;
 	}
 
+    // According to MS, topmost windows receive WM_DEVICECHANGE faster.
+	::SetWindowPos(hMessageWindow, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE|SWP_NOSIZE);
 	UpdateWindow(hMessageWindow);
 
 
 	// Register notification for additional HID messages.
-	GUID hidguid;
-	Win32HIDInterface HIDInterface;
-	HIDInterface.HidD_GetHidGuid(&hidguid);
+    HIDDeviceManager* hidDeviceManager = new HIDDeviceManager(NULL);
+	GUID hidguid = hidDeviceManager->GetHIDGuid();
+    hidDeviceManager->Release();
 
 	DEV_BROADCAST_DEVICEINTERFACE notificationFilter;
 
@@ -145,11 +147,12 @@ void DeviceStatus::ProcessMessages()
 	}
 }
 
-void DeviceStatus::MessageCallback(WORD messageType, const String& devicePath)
+bool DeviceStatus::MessageCallback(WORD messageType, const String& devicePath)
 {
+	bool rv = true;
 	if (messageType == DBT_DEVICEARRIVAL)
 	{
-		pNotificationClient->OnMessage(Notifier::DeviceAdded, devicePath);
+		rv = pNotificationClient->OnMessage(Notifier::DeviceAdded, devicePath);
 	}
 	else if (messageType == DBT_DEVICEREMOVECOMPLETE)
 	{
@@ -159,6 +162,41 @@ void DeviceStatus::MessageCallback(WORD messageType, const String& devicePath)
 	{
 		OVR_ASSERT(0);
 	}
+	return rv;
+}
+
+void DeviceStatus::CleanupRecoveryTimer(UPInt index)
+{
+    ::KillTimer(hMessageWindow, RecoveryTimers[index].TimerId);
+    RecoveryTimers.RemoveAt(index);
+}
+    
+DeviceStatus::RecoveryTimerDesc* 
+DeviceStatus::FindRecoveryTimer(UINT_PTR timerId, UPInt* pindex)
+{
+    for (UPInt i = 0, n = RecoveryTimers.GetSize(); i < n; ++i)
+    {
+        RecoveryTimerDesc* pdesc = &RecoveryTimers[i];
+        if (pdesc->TimerId == timerId)
+        {
+            *pindex = i;
+            return pdesc;
+        }
+    }
+    return NULL;
+}
+
+void DeviceStatus::FindAndCleanupRecoveryTimer(const String& devicePath)
+{
+    for (UPInt i = 0, n = RecoveryTimers.GetSize(); i < n; ++i)
+    {
+        RecoveryTimerDesc* pdesc = &RecoveryTimers[i];
+        if (pdesc->DevicePath.CompareNoCase(devicePath))
+        {
+            CleanupRecoveryTimer(i);
+            break;
+        }
+    }
 }
 
 LRESULT CALLBACK DeviceStatus::WindowsMessageCallback(  HWND hwnd, 
@@ -206,10 +244,76 @@ LRESULT CALLBACK DeviceStatus::WindowsMessageCallback(  HWND hwnd,
 
 			// Call callback on device messages object with the device path.
 			DeviceStatus* pDeviceStatus = (DeviceStatus*) userData;
-			String devicePathStr(hdr->dbcc_name);
-			pDeviceStatus->MessageCallback(loword, devicePathStr);
+			String devicePath(hdr->dbcc_name);
+
+            // check if recovery timer is already running; stop it and 
+            // remove it, if so.
+            pDeviceStatus->FindAndCleanupRecoveryTimer(devicePath);
+
+			if (!pDeviceStatus->MessageCallback(loword, devicePath))
+			{
+				// hmmm.... unsuccessful
+				if (loword == DBT_DEVICEARRIVAL)
+				{
+                    // Windows sometimes may return errors ERROR_SHARING_VIOLATION and
+                    // ERROR_FILE_NOT_FOUND when trying to open an USB device via
+                    // CreateFile. Need to start a recovery timer that will try to 
+                    // re-open the device again.
+					OVR_DEBUG_LOG(("Adding failed, recovering through a timer..."));
+                    UINT_PTR tid = ::SetTimer(hwnd, ++pDeviceStatus->LastTimerId, 
+                                              USBRecoveryTimeInterval, NULL);
+                    RecoveryTimerDesc rtDesc;
+                    rtDesc.TimerId = tid;
+                    rtDesc.DevicePath = devicePath;
+                    rtDesc.NumAttempts= 0;
+                    pDeviceStatus->RecoveryTimers.PushBack(rtDesc);
+                    // wrap around the timer counter, avoid timerId == 0...
+                    if (pDeviceStatus->LastTimerId + 1 == 0)
+                        pDeviceStatus->LastTimerId = 0;
+				}
+			}
 		}
 		return TRUE;	// Grant WM_DEVICECHANGE request.
+
+	case WM_TIMER:
+		{
+			if (wParam != 0)
+			{
+				LONG_PTR userData = GetWindowLongPtr(hwnd, GWLP_USERDATA);
+				OVR_ASSERT(userData != NULL);
+
+				// Call callback on device messages object with the device path.
+				DeviceStatus* pDeviceStatus = (DeviceStatus*) userData;
+
+                // Check if we have recovery timer running (actually, we must be!)
+                UPInt rtIndex;
+                RecoveryTimerDesc* prtDesc = pDeviceStatus->FindRecoveryTimer(wParam, &rtIndex);
+				if (prtDesc)
+				{
+					if (pDeviceStatus->MessageCallback(DBT_DEVICEARRIVAL, prtDesc->DevicePath))
+					{
+                        OVR_DEBUG_LOG(("Recovered, adding is successful, cleaning up the timer..."));
+                        // now it is successful, kill the timer and cleanup
+                        pDeviceStatus->CleanupRecoveryTimer(rtIndex);
+					}
+                    else
+                    {
+                        if (++prtDesc->NumAttempts >= MaxUSBRecoveryAttempts)
+                        {
+                            OVR_DEBUG_LOG(("Failed to recover USB after %d attempts, path = '%s', aborting...",
+                                prtDesc->NumAttempts, prtDesc->DevicePath.ToCStr()));
+                            pDeviceStatus->CleanupRecoveryTimer(rtIndex);
+                        }
+                        else
+                        {
+                            OVR_DEBUG_LOG(("Failed to recover USB, %d attempts, path = '%s'",
+                                prtDesc->NumAttempts, prtDesc->DevicePath.ToCStr()));
+                        }
+                    }
+				}
+			}
+		}
+		return 0;
 
 	case WM_CLOSE:
 		{

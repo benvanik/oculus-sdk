@@ -64,17 +64,18 @@ enum ShaderStage
 // Built-in shader types; used by LoadBuiltinShader.
 enum BuiltinShaders
 {
-    VShader_MV          = 0,
-    VShader_MVP         = 1,
-    VShader_PostProcess = 2,
-    VShader_Count       = 3,
+    VShader_MV                      = 0,
+    VShader_MVP                     = 1,
+    VShader_PostProcess             = 2,
+    VShader_Count                   = 3,
 
-    FShader_Solid       = 0,
-    FShader_Gouraud     = 1,
-    FShader_Texture     = 2,    
-    FShader_PostProcess = 3,
-    FShader_LitGouraud  = 4,
-    FShader_LitTexture  = 5,	
+    FShader_Solid                   = 0,
+    FShader_Gouraud                 = 1,
+    FShader_Texture                 = 2,    
+    FShader_PostProcess             = 3,
+    FShader_PostProcessWithChromAb  = 4,
+    FShader_LitGouraud              = 5,
+    FShader_LitTexture              = 6,
     FShader_Count
 };
 
@@ -683,10 +684,31 @@ public:
     // Don't call these directly, use App/Platform instead
     virtual bool SetFullscreen(DisplayMode fullscreen) { OVR_UNUSED(fullscreen); return false; }    
     
+
+    enum PostProcessShader
+    {
+        PostProcessShader_Distortion                = 0,
+        PostProcessShader_DistortionAndChromAb      = 1,
+        PostProcessShader_Count
+    };
+
+    PostProcessShader GetPostProcessShader()
+    {
+        return PostProcessShaderActive;
+    }
+
+    void SetPostProcessShader(PostProcessShader newShader)
+    {
+        PostProcessShaderRequested = newShader;
+    }
+
 protected:
     // Stereo & post-processing
     virtual bool  initPostProcessSupport(PostProcessType pptype);
-    
+   
+private:
+    PostProcessShader   PostProcessShaderRequested;
+    PostProcessShader   PostProcessShaderActive;
 };
 
 int GetNumMipLevels(int w, int h);

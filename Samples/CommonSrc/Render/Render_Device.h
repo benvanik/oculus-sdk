@@ -78,20 +78,21 @@ enum ShaderStage
 
 enum BuiltinShaders
 {
-    VShader_MV          = 0,
-    VShader_MVP         = 1,
-    VShader_PostProcess = 2,
-    VShader_Count       = 3,
+    VShader_MV                      = 0,
+    VShader_MVP                     = 1,
+    VShader_PostProcess             = 2,
+    VShader_Count                   = 3,
 
-    FShader_Solid       = 0,
-    FShader_Gouraud     = 1,
-    FShader_Texture     = 2,
-    FShader_AlphaTexture= 3,
-    FShader_PostProcess = 4,
-    FShader_LitGouraud  = 5,
-    FShader_LitTexture  = 6,
-	FShader_MultiTexture= 7,
-    FShader_Count       = 8,
+    FShader_Solid                   = 0,
+    FShader_Gouraud                 = 1,
+    FShader_Texture                 = 2,
+    FShader_AlphaTexture            = 3,
+    FShader_PostProcess             = 4,
+    FShader_PostProcessWithChromAb  = 5,
+    FShader_LitGouraud              = 6,
+    FShader_LitTexture              = 7,
+	FShader_MultiTexture            = 8,
+    FShader_Count                   = 9,
 };
 
 
@@ -529,6 +530,8 @@ public:
     // Uses texture coordinates for exactly covering each surface once.
     static Model* CreateBox(Color c, Vector3f origin, Vector3f size);
     static Model* CreateCylinder(Color c, Vector3f origin, float height, float radius, int sides = 20);
+    static Model* CreateCone(Color c, Vector3f origin, float height, float radius, int sides = 20);
+    static Model* CreateSphere(Color c, Vector3f origin, float radius, int sides = 20);
 
     // Grid having halfx,halfy lines in each direction from the origin
     static Model* CreateGrid(Vector3f origin, Vector3f stepx, Vector3f stepy,
@@ -632,23 +635,42 @@ enum DisplayMode
     Display_FakeFullscreen
 };
     
+struct DisplayId
+{
+    // Windows
+    String MonitorName; // Monitor name for fullscreen mode
+    
+    // MacOS
+    long   CgDisplayId; // CGDirectDisplayID
+    
+    DisplayId() : CgDisplayId(0) {}
+    DisplayId(long id) : CgDisplayId(id) {}
+    DisplayId(String m, long id=0) : MonitorName(m), CgDisplayId(id) {}
+    
+    operator bool () const
+    {
+        return MonitorName.GetLength() || CgDisplayId;
+    }
+    
+    bool operator== (const DisplayId& b) const
+    {
+        return CgDisplayId == b.CgDisplayId &&
+            (strstr(MonitorName.ToCStr(), b.MonitorName.ToCStr()) ||
+             strstr(b.MonitorName.ToCStr(), MonitorName.ToCStr()));
+    }
+};
 
 struct RendererParams
 {
     int  Multisample;
     int  Fullscreen;
-
-    // Windows
-    String MonitorName; // Monitor name for fullscreen mode
-    
-    // MacOS
-    long   DisplayId;
+    DisplayId Display;
 
     RendererParams(int ms = 1) : Multisample(ms), Fullscreen(0) {}
     
     bool IsDisplaySet() const
     {
-        return MonitorName.GetLength() || DisplayId;
+        return Display;
     }
 };
 
@@ -661,28 +683,28 @@ class RenderDevice : public RefCountBase<RenderDevice>
 {
     friend class StereoGeomShaders;
 protected:
-    int             WindowWidth, WindowHeight;
-    RendererParams  Params;
-    Viewport        VP;
+    int                 WindowWidth, WindowHeight;
+    RendererParams      Params;
+    Viewport            VP;
 
-    Matrix4f        Proj;
-    Ptr<Buffer>     pTextVertexBuffer;
+    Matrix4f            Proj;
+    Ptr<Buffer>         pTextVertexBuffer;
 
 
     // For rendering with lens warping
-    PostProcessType CurPostProcess;
-    Ptr<Texture>    pSceneColorTex;
-    int             SceneColorTexW;
-    int             SceneColorTexH;
-    Ptr<ShaderSet>  pPostProcessShader;
-    Ptr<Buffer>     pFullScreenVertexBuffer;
-    float           SceneRenderScale;
-    DistortionConfig Distortion;
-    Color           DistortionClearColor;
-    UPInt			TotalTextureMemoryUsage;
+    PostProcessType     CurPostProcess;
+    Ptr<Texture>        pSceneColorTex;
+    int                 SceneColorTexW;
+    int                 SceneColorTexH;
+    Ptr<ShaderSet>      pPostProcessShader;
+    Ptr<Buffer>         pFullScreenVertexBuffer;
+    float               SceneRenderScale;
+    DistortionConfig    Distortion;
+    Color               DistortionClearColor;
+    UPInt			    TotalTextureMemoryUsage;
 
     // For lighting on platforms with uniform buffers
-    Ptr<Buffer>     LightingBuffer;
+    Ptr<Buffer>         LightingBuffer;
 
     void FinishScene1();
 
@@ -794,6 +816,8 @@ public:
     // offset is in bytes; indices can be null.
     virtual void Render(const Fill* fill, Buffer* vertices, Buffer* indices,
                         const Matrix4f& matrix, int offset, int count, PrimitiveType prim = Prim_Triangles) = 0;
+    virtual void RenderWithAlpha(const Fill* fill, Render::Buffer* vertices, Render::Buffer* indices,
+                        const Matrix4f& matrix, int offset, int count, PrimitiveType prim = Prim_Triangles) = 0;
 
     // Returns width of text in same units as drawing. If strsize is not null, stores width and height.
     float        MeasureText(const struct Font* font, const char* str, float size, float* strsize = NULL);
@@ -828,13 +852,34 @@ public:
     {
         return TotalTextureMemoryUsage;
     }
-    
+
+    enum PostProcessShader
+    {
+        PostProcessShader_Distortion                = 0,
+        PostProcessShader_DistortionAndChromAb      = 1,
+        PostProcessShader_Count
+    };
+
+    PostProcessShader GetPostProcessShader()
+    {
+        return PostProcessShaderActive;
+    }
+
+    void SetPostProcessShader(PostProcessShader newShader)
+    {
+        PostProcessShaderRequested = newShader;
+    }
+
 protected:
     // Stereo & post-processing
     virtual bool  initPostProcessSupport(PostProcessType pptype);
     
     virtual Shader* CreateStereoShader(PrimitiveType prim, Shader* vs)
     { OVR_UNUSED2(prim, vs); return NULL; }
+
+private:
+    PostProcessShader   PostProcessShaderRequested;
+    PostProcessShader   PostProcessShaderActive;
 };
 
 int GetNumMipLevels(int w, int h);

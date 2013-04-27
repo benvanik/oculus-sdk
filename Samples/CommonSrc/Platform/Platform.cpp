@@ -66,4 +66,9 @@ bool PlatformCore::SetFullscreen(const Render::RendererParams&, int fullscreen)
     return 0;
 }
 
+Render::DisplayId PlatformCore::GetDisplay(int screen)
+{
+    OVR_UNUSED(screen); return Render::DisplayId();
+}
+
 }}

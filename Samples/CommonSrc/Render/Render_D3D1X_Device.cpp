@@ -218,6 +218,7 @@ static const char* PostProcessVertexShaderSrc =
     "   oColor = Color;\n"
     "}\n";
 
+// Shader with just lens distortion correction.
 static const char* PostProcessPixelShaderSrc =
     "Texture2D Texture : register(t0);\n"
     "SamplerState Linear : register(s0);\n"
@@ -234,7 +235,7 @@ static const char* PostProcessPixelShaderSrc =
     "float2 HmdWarp(float2 in01)\n"
     "{\n"
     "   float2 theta = (in01 - LensCenter) * ScaleIn;\n" // Scales to [-1, 1]
-    "   float  rSq= theta.x * theta.x + theta.y * theta.y;\n"
+    "   float  rSq = theta.x * theta.x + theta.y * theta.y;\n"
     "   float2 theta1 = theta * (HmdWarpParam.x + HmdWarpParam.y * rSq + "
     "                   HmdWarpParam.z * rSq * rSq + HmdWarpParam.w * rSq * rSq * rSq);\n"
     "   return LensCenter + Scale * theta1;\n"
@@ -249,6 +250,51 @@ static const char* PostProcessPixelShaderSrc =
     "   return Texture.Sample(Linear, tc);\n"
     "}\n";
 
+// Shader with lens distortion and chromatic aberration correction.
+static const char* PostProcessPixelShaderWithChromAbSrc =
+    "Texture2D Texture : register(t0);\n"
+    "SamplerState Linear : register(s0);\n"
+    "float2 LensCenter;\n"
+    "float2 ScreenCenter;\n"
+    "float2 Scale;\n"
+    "float2 ScaleIn;\n"
+    "float4 HmdWarpParam;\n"
+    "float4 ChromAbParam;\n"
+    "\n"
+
+    // Scales input texture coordinates for distortion.
+    // ScaleIn maps texture coordinates to Scales to ([-1, 1]), although top/bottom will be
+    // larger due to aspect ratio.
+    "float4 main(in float4 oPosition : SV_Position, in float4 oColor : COLOR,\n"
+    "            in float2 oTexCoord : TEXCOORD0) : SV_Target\n"
+    "{\n"
+    "   float2 theta = (oTexCoord - LensCenter) * ScaleIn;\n" // Scales to [-1, 1]
+    "   float  rSq = theta.x * theta.x + theta.y * theta.y;\n"
+    "   float2 theta1 = theta * (HmdWarpParam.x + HmdWarpParam.y * rSq + "
+    "                   HmdWarpParam.z * rSq * rSq + HmdWarpParam.w * rSq * rSq * rSq);\n"
+    "   \n"
+    "   // Detect whether blue texture coordinates are out of range since these will scaled out the furthest.\n"
+    "   float2 thetaBlue = theta1 * (ChromAbParam.z + ChromAbParam.w * rSq);\n"
+    "   float2 tcBlue = LensCenter + Scale * thetaBlue;\n"
+    "   if (any(clamp(tcBlue, ScreenCenter-float2(0.25,0.5), ScreenCenter+float2(0.25, 0.5)) - tcBlue))\n"
+    "       return 0;\n"
+    "   \n"
+    "   // Now do blue texture lookup.\n"
+    "   float  blue = Texture.Sample(Linear, tcBlue).b;\n"
+    "   \n"
+    "   // Do green lookup (no scaling).\n"
+    "   float2 tcGreen = LensCenter + Scale * theta1;\n"
+    "   float4 greenColor = Texture.Sample(Linear, tcGreen);\n"
+    "   float  green = greenColor.g;\n"
+    "   float  alpha = greenColor.a;\n"
+    "   \n"
+    "   // Do red scale and lookup.\n"
+    "   float2 thetaRed = theta1 * (ChromAbParam.x + ChromAbParam.y * rSq);\n"
+    "   float2 tcRed = LensCenter + Scale * thetaRed;\n"
+    "   float  red = Texture.Sample(Linear, tcRed).r;\n"
+    "   \n"
+    "   return float4(red, green, blue, alpha);\n"
+    "}\n";
 
 
 static const char* VShaderSrcs[VShader_Count] =
@@ -264,6 +310,7 @@ static const char* FShaderSrcs[FShader_Count] =
     TexturePixelShaderSrc,
     AlphaTexturePixelShaderSrc,
     PostProcessPixelShaderSrc,
+    PostProcessPixelShaderWithChromAbSrc,
     LitSolidPixelShaderSrc,
     LitTexturePixelShaderSrc,
     MultiTexturePixelShaderSrc
@@ -285,7 +332,7 @@ RenderDevice::RenderDevice(const RendererParams& p, HWND window)
         return;
 
     // Find the adapter & output (monitor) to use for fullscreen, based on the reported name of the HMD's monitor.
-    if (Params.MonitorName.GetLength() > 0)
+    if (Params.Display.MonitorName.GetLength() > 0)
     {
         for(UINT AdapterIndex = 0; ; AdapterIndex++)
         {
@@ -437,7 +484,7 @@ BOOL CALLBACK MonitorEnumFunc(HMONITOR hMonitor, HDC, LPRECT, LPARAM dwData)
 
         if (::EnumDisplayDevices(monitor.szDevice, 0, &dispDev, 0))
         {
-            if (strstr(String(dispDev.DeviceName).ToCStr(), renderer->GetParams().MonitorName.ToCStr()))
+            if (strstr(String(dispDev.DeviceName).ToCStr(), renderer->GetParams().Display.MonitorName.ToCStr()))
             {
                 renderer->FSDesktopX = monitor.rcMonitor.left;
                 renderer->FSDesktopY = monitor.rcMonitor.top;
@@ -478,7 +525,7 @@ void RenderDevice::UpdateMonitorOutputs()
 
             if (::EnumDisplayDevices(monitor.szDevice, 0, &dispDev, 0))
             {
-                if (strstr(String(dispDev.DeviceName).ToCStr(), Params.MonitorName.ToCStr()))
+                if (strstr(String(dispDev.DeviceName).ToCStr(), Params.Display.MonitorName.ToCStr()))
                 {
                     deviceNameFound = true;
                     FullscreenOutput = Output;
@@ -490,7 +537,7 @@ void RenderDevice::UpdateMonitorOutputs()
         }
     }
 
-    if (!deviceNameFound && !Params.MonitorName.IsEmpty())
+    if (!deviceNameFound && !Params.Display.MonitorName.IsEmpty())
     {
         EnumDisplayMonitors(0, 0, MonitorEnumFunc, (LPARAM)this);
     }
@@ -546,10 +593,10 @@ bool RenderDevice::RecreateSwapChain()
 
 bool RenderDevice::SetParams(const RendererParams& newParams)
 {
-    String oldMonitor = Params.MonitorName;
+    String oldMonitor = Params.Display.MonitorName;
 
     Params = newParams;
-    if (newParams.MonitorName != oldMonitor)
+    if (newParams.Display.MonitorName != oldMonitor)
     {
         UpdateMonitorOutputs();
     }
@@ -715,74 +762,67 @@ Texture* RenderDevice::GetDepthBuffer(int w, int h, int ms)
 void RenderDevice::Clear(float r, float g, float b, float a, float depth)
 {
     const float color[] = {r, g, b, a};
-    if (0)
-    {
-        Context->ClearRenderTargetView(CurRenderTarget ? CurRenderTarget->TexRtv : BackBufferRT, color);
-        Context->ClearDepthStencilView(CurDepthBuffer->TexDsv, D3D1x_(CLEAR_DEPTH), depth, 0);
-    }
-    else
-    {
-        // save state that is affected by clearing this way
-        ID3D1xDepthStencilState* oldDepthState = CurDepthState;
-        StandardUniformData      clearUniforms;
 
-        SetDepthMode(true, true, Compare_Always);
+	// save state that is affected by clearing this way
+    ID3D1xDepthStencilState* oldDepthState = CurDepthState;
+	StandardUniformData      clearUniforms;
 
-        Context->IASetInputLayout(ModelVertexIL);
+    SetDepthMode(true, true, Compare_Always);
+		
+    Context->IASetInputLayout(ModelVertexIL);
 #if (OVR_D3D_VERSION == 10)
-        Context->GSSetShader(NULL);
+    Context->GSSetShader(NULL);
 #else
-        Context->GSSetShader(NULL, NULL, 0);
+    Context->GSSetShader(NULL, NULL, 0);
 #endif
-        //Shader<Shader_Geometry,ID3D1xGeometryShader> NullGS(this,(ID3D1xGeometryShader*)NULL);
-        //NullGS.Set(Prim_TriangleStrip);
+    //Shader<Shader_Geometry,ID3D1xGeometryShader> NullGS(this,(ID3D1xGeometryShader*)NULL);
+    //NullGS.Set(Prim_TriangleStrip);
 
-        ID3D1xShaderResourceView* sv[8] = {0, 0, 0, 0, 0, 0, 0, 0};
-        if (MaxTextureSet[Shader_Fragment])
+    ID3D1xShaderResourceView* sv[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+    if (MaxTextureSet[Shader_Fragment])
+    {
+        Context->PSSetShaderResources(0, MaxTextureSet[Shader_Fragment], sv);
+    }
+
+    ID3D1xBuffer* vertexBuffer = QuadVertexBuffer->GetBuffer();
+    UINT vertexStride = sizeof(Vertex);
+    UINT vertexOffset = 0;
+    Context->IASetVertexBuffers(0, 1, &vertexBuffer, &vertexStride, &vertexOffset);
+
+    clearUniforms.View = Matrix4f(2, 0, 0, 0,
+                                    0, 2, 0, 0,
+                                    0, 0, 0, 0,
+                                    -1, -1, depth, 1);
+    UniformBuffers[Shader_Vertex]->Data(Buffer_Uniform, &clearUniforms, sizeof(clearUniforms));
+
+    ID3D1xBuffer* vertexConstants = UniformBuffers[Shader_Vertex]->GetBuffer();
+    Context->VSSetConstantBuffers(0, 1, &vertexConstants);
+    Context->IASetPrimitiveTopology(D3D1x_(PRIMITIVE_TOPOLOGY_TRIANGLESTRIP));
+    VertexShaders[VShader_MV]->Set(Prim_TriangleStrip);
+    PixelShaders[FShader_Solid]->Set(Prim_TriangleStrip);
+
+    UniformBuffers[Shader_Pixel]->Data(Buffer_Uniform, color, sizeof(color));
+    PixelShaders[FShader_Solid]->SetUniformBuffer(UniformBuffers[Shader_Pixel]);
+
+    if (NumViewports > 1)
+    {
+        for(int i = 0; i < NumViewports; i++)
         {
-            Context->PSSetShaderResources(0, MaxTextureSet[Shader_Fragment], sv);
-        }
-
-        ID3D1xBuffer* vertexBuffer = QuadVertexBuffer->GetBuffer();
-        UINT vertexStride = sizeof(Vertex);
-        UINT vertexOffset = 0;
-        Context->IASetVertexBuffers(0, 1, &vertexBuffer, &vertexStride, &vertexOffset);
-
-        clearUniforms.View = Matrix4f(2, 0, 0, 0,
-                                      0, 2, 0, 0,
-                                      0, 0, 0, 0,
-                                      -1, -1, depth, 1);
-        UniformBuffers[Shader_Vertex]->Data(Buffer_Uniform, &clearUniforms, sizeof(clearUniforms));
-
-        ID3D1xBuffer* vertexConstants = UniformBuffers[Shader_Vertex]->GetBuffer();
-        Context->VSSetConstantBuffers(0, 1, &vertexConstants);
-        Context->IASetPrimitiveTopology(D3D1x_(PRIMITIVE_TOPOLOGY_TRIANGLESTRIP));
-        VertexShaders[VShader_MV]->Set(Prim_TriangleStrip);
-        PixelShaders[FShader_Solid]->Set(Prim_TriangleStrip);
-
-        UniformBuffers[Shader_Pixel]->Data(Buffer_Uniform, color, sizeof(color));
-        PixelShaders[FShader_Solid]->SetUniformBuffer(UniformBuffers[Shader_Pixel]);
-
-        if (NumViewports > 1)
-        {
-            for(int i = 0; i < NumViewports; i++)
-            {
-                Context->RSSetViewports(1, &Viewports[i]);
-                Context->OMSetBlendState(NULL, NULL, 0xffffffff);
-                Context->Draw(4, 0);
-            }
-            Context->RSSetViewports(NumViewports, Viewports);
-        }
-        else
-        {
+            Context->RSSetViewports(1, &Viewports[i]);
             Context->OMSetBlendState(NULL, NULL, 0xffffffff);
             Context->Draw(4, 0);
         }
-
-        // reset
-        CurDepthState = oldDepthState;
-        Context->OMSetDepthStencilState(CurDepthState, 0);
+        Context->RSSetViewports(NumViewports, Viewports);
     }
+    else
+    {
+		Context->OMSetBlendState(NULL, NULL, 0xffffffff);
+		Context->Draw(4, 0);
+    }
+
+    // reset
+    CurDepthState = oldDepthState;
+    Context->OMSetDepthStencilState(CurDepthState, 0);
 }
 
 // Buffers
@@ -1266,10 +1306,11 @@ void RenderDevice::GenerateSubresourceData(
     unsigned numRows    = 0;
     const byte* mipBytes = static_cast<const byte*>(rawBytes);
 
-    unsigned index = 0;
-    unsigned subresWidth = imageWidth;
+    unsigned index        = 0;
+    unsigned subresWidth  = imageWidth;
     unsigned subresHeight = imageHeight;
-    unsigned numMips = effectiveMipCount;
+    unsigned numMips      = effectiveMipCount;
+
     for(unsigned i = 0; i < numMips; i++)
     {
         unsigned bytesPerBlock = 0;
@@ -1354,27 +1395,29 @@ Texture* RenderDevice::CreateTexture(int format, int width, int height, const vo
     }
  
     unsigned imageDimUpperLimit = 0;
-    if(gpuMemorySize <= _256Megabytes)
+    if (gpuMemorySize <= _256Megabytes)
     {
         imageDimUpperLimit = 512;
-    }
-    else if(gpuMemorySize <= _512Megabytes)
+    }    
+    else if (gpuMemorySize <= _512Megabytes)
     {
         imageDimUpperLimit = 1024;
-    }
-    if(format == Texture_DXT1 || format == Texture_DXT5)
+    } 
+
+    if (format == Texture_DXT1 || format == Texture_DXT5)
     {
-        int convertedFormat = format == Texture_DXT1 ? DXGI_FORMAT_BC1_UNORM : DXGI_FORMAT_BC3_UNORM;
-        unsigned largestMipWidth = 0;
-        unsigned largestMipHeight = 0;
+        int      convertedFormat   = (format == Texture_DXT1) ? DXGI_FORMAT_BC1_UNORM : DXGI_FORMAT_BC3_UNORM;
+        unsigned largestMipWidth   = 0;
+        unsigned largestMipHeight  = 0;
         unsigned effectiveMipCount = mipcount;
-        unsigned textureSize = 0;
+        unsigned textureSize       = 0;
 
 #ifdef OVR_DEFINE_NEW
 #undef new
 #endif
-
-        D3D1x_(SUBRESOURCE_DATA)* subresData = new D3D1x_(SUBRESOURCE_DATA)[mipcount];
+        
+        D3D1x_(SUBRESOURCE_DATA)* subresData = (D3D1x_(SUBRESOURCE_DATA)*)
+                                                OVR_ALLOC(sizeof(D3D1x_(SUBRESOURCE_DATA)) * mipcount);
         GenerateSubresourceData(width, height, convertedFormat, imageDimUpperLimit, data, subresData, largestMipWidth,
                                 largestMipHeight, textureSize, effectiveMipCount);
         TotalTextureMemoryUsage += textureSize;
@@ -1399,7 +1442,7 @@ Texture* RenderDevice::CreateTexture(int format, int width, int height, const vo
         D3D1x_(TEXTURE2D_DESC) desc;
         desc.Width      = largestMipWidth;
         desc.Height     = largestMipHeight;
-        desc.MipLevels  = mipcount;
+        desc.MipLevels  = effectiveMipCount;
         desc.ArraySize  = 1;
         desc.Format     = static_cast<DXGI_FORMAT>(convertedFormat);
         desc.SampleDesc.Count = samples;
@@ -1411,7 +1454,7 @@ Texture* RenderDevice::CreateTexture(int format, int width, int height, const vo
 
         HRESULT hr = Device->CreateTexture2D(&desc, static_cast<D3D1x_(SUBRESOURCE_DATA)*>(subresData),
                                              &NewTex->Tex.GetRawRef());
-        delete [] subresData;
+        OVR_FREE(subresData);
 
         if (SUCCEEDED(hr) && NewTex != 0)
         {
@@ -1626,6 +1669,14 @@ void RenderDevice::Render(const Matrix4f& matrix, Model* model)
     Render(model->Fill ? model->Fill : DefaultFill,
            model->VertexBuffer, model->IndexBuffer,
            matrix, 0, (unsigned)model->Indices.GetSize(), model->GetPrimType());
+}
+
+void RenderDevice::RenderWithAlpha(	const Fill* fill, Render::Buffer* vertices, Render::Buffer* indices,
+									const Matrix4f& matrix, int offset, int count, PrimitiveType rprim)
+{
+	Context->OMSetBlendState(BlendState, NULL, 0xffffffff);
+    Render(fill, vertices, indices, matrix, offset, count, rprim);
+    Context->OMSetBlendState(NULL, NULL, 0xffffffff);
 }
 
 void RenderDevice::Render(const Fill* fill, Render::Buffer* vertices, Render::Buffer* indices,

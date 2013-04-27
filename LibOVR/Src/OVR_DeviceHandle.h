@@ -44,6 +44,8 @@ class DeviceHandle
 {    
 	friend class DeviceManager;
 	friend class DeviceManagerImpl;
+    template<class B> friend class HIDDeviceImpl;
+
 public:
 	DeviceHandle() : pImpl(0) { }    
 	DeviceHandle(const DeviceHandle& src);

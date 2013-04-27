@@ -335,6 +335,8 @@ public:
     virtual void Render(const Matrix4f& matrix, Model* model);
     virtual void Render(const Fill* fill, Render::Buffer* vertices, Render::Buffer* indices,
                         const Matrix4f& matrix, int offset, int count, PrimitiveType prim = Prim_Triangles);
+    virtual void RenderWithAlpha(   const Fill* fill, Render::Buffer* vertices, Render::Buffer* indices,
+                                    const Matrix4f& matrix, int offset, int count, PrimitiveType prim = Prim_Triangles);
 
     virtual Fill *CreateSimpleFill(int flags = Fill::F_Solid);
 

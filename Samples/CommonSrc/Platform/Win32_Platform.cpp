@@ -521,7 +521,7 @@ BOOL CALLBACK MonitorEnumProc(HMONITOR hMonitor, HDC, LPRECT, LPARAM dwData)
 
 
 // Returns the number of active screens for extended displays and 1 for mirrored display
-int PlatformCore::GetScreenCount()
+int PlatformCore::GetDisplayCount()
 {
     // Get all the monitor handles
     MonitorSet monitors;
@@ -549,7 +549,7 @@ int PlatformCore::GetScreenCount()
 //-----------------------------------------------------------------------------
 // Returns the device name for the given screen index or empty string for invalid index
 // The zero index will always return the primary screen name
-String PlatformCore::GetScreenName(int screen)
+Render::DisplayId PlatformCore::GetDisplay(int screen)
 {
     // Get all the monitor handles
     MonitorSet monitors;

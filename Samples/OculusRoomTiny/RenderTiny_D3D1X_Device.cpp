@@ -185,6 +185,7 @@ static const char* PostProcessVertexShaderSrc =
     "   oColor = Color;\n"
     "}\n";
 
+// Shader with just lens distortion correction.
 static const char* PostProcessPixelShaderSrc =
     "Texture2D Texture : register(t0);\n"
     "SamplerState Linear : register(s0);\n"
@@ -201,19 +202,63 @@ static const char* PostProcessPixelShaderSrc =
     "float2 HmdWarp(float2 in01)\n"
     "{\n"
     "   float2 theta = (in01 - LensCenter) * ScaleIn;\n" // Scales to [-1, 1]
-    "   float  rSq= theta.x * theta.x + theta.y * theta.y;\n"
+    "   float  rSq = theta.x * theta.x + theta.y * theta.y;\n"
     "   float2 theta1 = theta * (HmdWarpParam.x + HmdWarpParam.y * rSq + "
     "                   HmdWarpParam.z * rSq * rSq + HmdWarpParam.w * rSq * rSq * rSq);\n"
     "   return LensCenter + Scale * theta1;\n"
     "}\n"
 
     "float4 main(in float4 oPosition : SV_Position, in float4 oColor : COLOR,\n"
-    "            in float2 oTexCoord : TEXCOORD0) : SV_Target\n"
+    " in float2 oTexCoord : TEXCOORD0) : SV_Target\n"
     "{\n"
     "   float2 tc = HmdWarp(oTexCoord);\n"
     "   if (any(clamp(tc, ScreenCenter-float2(0.25,0.5), ScreenCenter+float2(0.25, 0.5)) - tc))\n"
     "       return 0;\n"
     "   return Texture.Sample(Linear, tc);\n"
+    "}\n";
+
+// Shader with lens distortion and chromatic aberration correction.
+static const char* PostProcessPixelShaderWithChromAbSrc =
+    "Texture2D Texture : register(t0);\n"
+    "SamplerState Linear : register(s0);\n"
+    "float2 LensCenter;\n"
+    "float2 ScreenCenter;\n"
+    "float2 Scale;\n"
+    "float2 ScaleIn;\n"
+    "float4 HmdWarpParam;\n"
+    "float4 ChromAbParam;\n"
+    "\n"
+
+    // Scales input texture coordinates for distortion.
+    // ScaleIn maps texture coordinates to Scales to ([-1, 1]), although top/bottom will be
+    // larger due to aspect ratio.
+    "float4 main(in float4 oPosition : SV_Position, in float4 oColor : COLOR,\n"
+    "            in float2 oTexCoord : TEXCOORD0) : SV_Target\n"
+    "{\n"
+    "   float2 theta = (oTexCoord - LensCenter) * ScaleIn;\n" // Scales to [-1, 1]
+    "   float  rSq= theta.x * theta.x + theta.y * theta.y;\n"
+    "   float2 theta1 = theta * (HmdWarpParam.x + HmdWarpParam.y * rSq + "
+    "                   HmdWarpParam.z * rSq * rSq + HmdWarpParam.w * rSq * rSq * rSq);\n"
+    "   \n"
+    "   // Detect whether blue texture coordinates are out of range since these will scaled out the furthest.\n"
+    "   float2 thetaBlue = theta1 * (ChromAbParam.z + ChromAbParam.w * rSq);\n"
+    "   float2 tcBlue = LensCenter + Scale * thetaBlue;\n"
+    "   if (any(clamp(tcBlue, ScreenCenter-float2(0.25,0.5), ScreenCenter+float2(0.25, 0.5)) - tcBlue))\n"
+    "       return 0;\n"
+    "   \n"
+    "   // Now do blue texture lookup.\n"
+    "   float  blue = Texture.Sample(Linear, tcBlue).b;\n"
+    "   \n"
+    "   // Do green lookup (no scaling).\n"
+    "   float2 tcGreen = LensCenter + Scale * theta1;\n"
+    "   float  green = Texture.Sample(Linear, tcGreen).g;\n"
+    "   \n"
+    "   // Do red scale and lookup.\n"
+    "   float2 thetaRed = theta1 * (ChromAbParam.x + ChromAbParam.y * rSq);\n"
+    "   float2 tcRed = LensCenter + Scale * thetaRed;\n"
+    "   float  red = Texture.Sample(Linear, tcRed).r;\n"
+    "   \n"
+    "   return float4(red, green, blue, 1);\n"
     "}\n";
 
 
@@ -229,6 +274,7 @@ static const char* FShaderSrcs[FShader_Count] =
     GouraudPixelShaderSrc,
     TexturePixelShaderSrc,    
     PostProcessPixelShaderSrc,
+    PostProcessPixelShaderWithChromAbSrc,
     LitSolidPixelShaderSrc,
     LitTexturePixelShaderSrc    
 };

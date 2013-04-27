@@ -2,9 +2,9 @@
 
 PublicHeader:   OVR.h
 Filename    :   OVR_SensorFusion.h
-Content     :   Implementation of Sensor fusion
+Content     :   Methods that determine head orientation from sensor data over time
 Created     :   October 9, 2012
-Authors     :   Michael Antonov
+Authors     :   Michael Antonov, Steve LaValle
 
 Copyright   :   Copyright 2012 Oculus VR, Inc. All Rights reserved.
 
@@ -18,9 +18,9 @@ otherwise accompanies this software in either electronic or hard copy form.
 #define OVR_SensorFusion_h
 
 #include "OVR_Device.h"
+#include "OVR_SensorFilter.h"
 
 namespace OVR {
-
 
 //-------------------------------------------------------------------------------------
 // ***** SensorFusion
@@ -38,19 +38,8 @@ namespace OVR {
 class SensorFusion : public NewOverrideBase
 {
 public:
-    SensorFusion(SensorDevice* sensor = 0)
-        : Handler(getThis()), pDelegate(0),
-          Gain(0.05f), YawMult(1), EnableGravity(true), 
-		  EnablePrediction(false), FilterPrediction(false), PredictionDT(0)
-    {
-        if (sensor)
-            AttachToSensor(sensor);
-
-		ResetAngVFilter();
-    }
-    ~SensorFusion()
-    {
-    }
+    SensorFusion(SensorDevice* sensor = 0);
+    ~SensorFusion();
     
     // Attaches this SensorFusion to a sensor device, from which it will receive
     // notification messages. If a sensor is attached, manual message notification
@@ -58,14 +47,53 @@ public:
     bool        AttachToSensor(SensorDevice* sensor);
 
     // Returns true if this Sensor fusion object is attached to a sensor.
-    bool        IsAttachedToSensor() const
-    { return Handler.IsHandlerInstalled(); }
+    bool        IsAttachedToSensor() const { return Handler.IsHandlerInstalled(); }
 
-    void        SetGravityEnabled(bool enableGravity)
-    { EnableGravity = enableGravity; }
+    void        SetGravityEnabled(bool enableGravity) { EnableGravity = enableGravity; }
    
-	bool        IsGravityEnabled() const
-    { return EnableGravity;}
+    bool        IsGravityEnabled() const { return EnableGravity;}
+
+    void        SetYawCorrectionEnabled(bool enableYawCorrection) { EnableYawCorrection = enableYawCorrection; }
+   
+    // Yaw correction is set up to work
+    bool        IsYawCorrectionEnabled() const { return EnableYawCorrection;}
+
+    // Yaw correction is currently working (forcing a corrective yaw rotation)
+    bool        IsYawCorrectionInProgress() const { return YawCorrectionInProgress;}
+
+    // Store the calibration matrix for the magnetometer
+    void        SetMagCalibration(const Matrix4f& m)
+    {
+        MagCalibrationMatrix = m;
+        MagCalibrated = true;
+    }
+
+    // True only if the mag has calibration values stored
+    bool        HasMagCalibration() const { return MagCalibrated;}
+    
+    // Force the mag into the uncalibrated state
+    void        ClearMagCalibration() 
+    { 
+        MagCalibrated = false;
+        MagReady = false;
+    }
+
+    // Set the magnetometer's reference orientation for use in yaw correction
+    void        SetMagReference(const Quatf& q);
+    // Default to current HMD orientation
+    void        SetMagReference() { SetMagReference(Q); }
+
+    bool        HasMagReference() const { return MagReferenced; }
+
+    void        ClearMagReference() 
+    { 
+        MagReferenced = false; 
+        MagReady = false;
+    }
+
+    bool        IsMagReady() const { return MagReady; }
+
+    void        SetMagRefDistance(const float d) { MagRefDistance = d; }
 
     // Notifies SensorFusion object about a new BodyFrame message from a sensor.
     // Should be called by user if not attaching to a sensor.
@@ -99,19 +127,36 @@ public:
         Lock::Locker lockScope(Handler.GetHandlerLock());
         return AngV;
     }
+    // Obtain the last magnetometer reading, in Gauss
+    Vector3f    GetMagnetometer() const
+    {
+        Lock::Locker lockScope(Handler.GetHandlerLock());
+        return Mag;
+    }
+    // Obtain the raw magnetometer reading, in Gauss (uncalibrated!)
+    Vector3f    GetRawMagnetometer() const
+    {
+        Lock::Locker lockScope(Handler.GetHandlerLock());
+        return RawMag;
+    }
 
+    float       GetMagRefYaw() const
+    {
+        return MagRefYaw;
+    }
     // For later
     //Vector3f    GetGravity() const;
 
-    // Resets the current orientation and acceleration.
+    // Resets the current orientation
     void        Reset()
     {
-        Lock::Locker lockScope(Handler.GetHandlerLock());
-        Q = Quatf();
-        QP = Quatf();
-        A = Vector3f();
+        MagReferenced = false;
 
-		ResetAngVFilter();
+        Lock::Locker lockScope(Handler.GetHandlerLock());
+        Q  = Quatf();
+        QP = Quatf();
+
+        Stage = 0;
     }
 
     // Configuration
@@ -135,7 +180,14 @@ public:
     // predicted orientation.
     float       GetPredictionDelta() const                  { return PredictionDT; }
     void        SetPrediction(float dt, bool enable = true) { PredictionDT = dt; EnablePrediction = enable; }
-	void		SetPredictionFilter(bool enable = true)     {FilterPrediction = enable;}
+	void		SetPredictionEnabled(bool enable = true)    { EnablePrediction = enable; }    
+	bool		IsPredictionEnabled()                       { return EnablePrediction; }
+
+    // Methods for magnetometer calibration
+    float       AngleDifference(float theta1, float theta2);
+    Vector3f    CalculateSphereCenter(Vector3f p1, Vector3f p2,
+                                      Vector3f p3, Vector3f p4);
+
 
 private:
     SensorFusion* getThis()  { return this; }
@@ -157,6 +209,9 @@ private:
     Quatf             Q;
     Vector3f          A;    
     Vector3f          AngV;
+    Vector3f          Mag;
+    Vector3f          RawMag;
+    unsigned int      Stage;
     BodyFrameHandler  Handler;
     MessageHandler*   pDelegate;
     float             Gain;
@@ -164,14 +219,31 @@ private:
     volatile bool     EnableGravity;
 
     bool              EnablePrediction;
-	bool			  FilterPrediction;
     float             PredictionDT;
     Quatf             QP;
 
-	// Testing AngV filtering suggested by Steve
-	Vector3f		  AngVFilterHistory[8];
-	void			  ResetAngVFilter();
-	void			  GetAngVFilterVal(const Vector3f &in, Vector3f &out);
+    SensorFilter      FMag;
+    SensorFilter      FAccW;
+    SensorFilter      FAngV;
+
+    int               TiltCondCount;
+    float             TiltErrorAngle;
+    Vector3f          TiltErrorAxis;
+
+    bool              EnableYawCorrection;
+    Matrix4f          MagCalibrationMatrix;
+    bool              MagCalibrated;
+    int               MagCondCount;
+    bool              MagReferenced;
+    float             MagRefDistance;
+    bool              MagReady;
+    Quatf             MagRefQ;
+    Vector3f          MagRefM;
+    float             MagRefYaw;
+    float             YawErrorAngle;
+    int               YawErrorCount;
+    bool              YawCorrectionInProgress;
+
 };
 
 

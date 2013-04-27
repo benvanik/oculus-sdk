@@ -318,7 +318,7 @@ bool DeviceManagerImpl::Initialize(DeviceBase* parent)
 {
     OVR_UNUSED(parent);
     if (!pCreateDesc || !pCreateDesc->pLock)
-        return false;    
+		return false;
     return true;
 }
 

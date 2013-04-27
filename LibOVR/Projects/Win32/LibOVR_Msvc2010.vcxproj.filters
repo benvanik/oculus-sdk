@@ -4,9 +4,7 @@
     <ClCompile Include="..\..\Src\OVR_SensorFusion.cpp" />
     <ClCompile Include="..\..\Src\OVR_ThreadCommandQueue.cpp" />
     <ClCompile Include="..\..\Src\OVR_Win32_DeviceManager.cpp" />
-    <ClCompile Include="..\..\Src\OVR_Win32_HID.cpp" />
     <ClCompile Include="..\..\Src\OVR_Win32_HMDDevice.cpp" />
-    <ClCompile Include="..\..\Src\OVR_Win32_Sensor.cpp" />
     <ClCompile Include="..\..\Src\Kernel\OVR_Alg.cpp">
       <Filter>Kernel</Filter>
     </ClCompile>
@@ -58,7 +56,6 @@
     <ClCompile Include="..\..\Src\OVR_DeviceImpl.cpp" />
     <ClCompile Include="..\..\Src\OVR_DeviceHandle.cpp" />
     <ClCompile Include="..\..\Src\OVR_Win32_DeviceStatus.cpp" />
-    <ClCompile Include="..\..\Src\OVR_Win32_LatencyTest.cpp" />
     <ClCompile Include="..\..\Src\Kernel\OVR_String_FormatUtil.cpp">
       <Filter>Kernel</Filter>
     </ClCompile>
@@ -68,15 +65,21 @@
     <ClCompile Include="..\..\Src\Util\Util_LatencyTest.cpp">
       <Filter>Util</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\Src\OVR_Win32_HIDDevice.cpp" />
+    <ClCompile Include="..\..\Src\OVR_LatencyTestImpl.cpp" />
+    <ClCompile Include="..\..\Src\OVR_SensorImpl.cpp" />
+    <ClCompile Include="..\..\Src\OVR_Win32_SensorDevice.cpp" />
+    <ClCompile Include="..\..\Src\Util\Util_MagCalibration.cpp">
+      <Filter>Util</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Src\OVR_SensorFilter.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\Src\OVR_DeviceImpl.h" />
     <ClInclude Include="..\..\Src\OVR_SensorFusion.h" />
     <ClInclude Include="..\..\Src\OVR_ThreadCommandQueue.h" />
     <ClInclude Include="..\..\Src\OVR_Win32_DeviceManager.h" />
-    <ClInclude Include="..\..\Src\OVR_Win32_HID.h" />
     <ClInclude Include="..\..\Src\OVR_Win32_HMDDevice.h" />
-    <ClInclude Include="..\..\Src\OVR_Win32_Sensor.h" />
     <ClInclude Include="..\..\Src\Kernel\OVR_Alg.h">
       <Filter>Kernel</Filter>
     </ClInclude>
@@ -148,7 +151,6 @@
     <ClInclude Include="..\..\Src\OVR_DeviceMessages.h" />
     <ClInclude Include="..\..\Src\OVR_DeviceHandle.h" />
     <ClInclude Include="..\..\Src\OVR_Win32_DeviceStatus.h" />
-    <ClInclude Include="..\..\Src\OVR_Win32_LatencyTest.h" />
     <ClInclude Include="..\..\Src\Kernel\OVR_Color.h">
       <Filter>Kernel</Filter>
     </ClInclude>
@@ -158,6 +160,17 @@
     <ClInclude Include="..\..\Src\Util\Util_LatencyTest.h">
       <Filter>Util</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\Src\OVR_HIDDevice.h" />
+    <ClInclude Include="..\..\Src\OVR_Win32_HIDDevice.h" />
+    <ClInclude Include="..\..\Src\OVR_HIDDeviceImpl.h" />
+    <ClInclude Include="..\..\Src\OVR_LatencyTestImpl.h" />
+    <ClInclude Include="..\..\Src\OVR_SensorImpl.h" />
+    <ClInclude Include="..\..\Src\OVR_HIDDeviceBase.h" />
+    <ClInclude Include="..\..\Src\OVR_Win32_SensorDevice.h" />
+    <ClInclude Include="..\..\Src\Util\Util_MagCalibration.h">
+      <Filter>Util</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Src\OVR_SensorFilter.h" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Kernel">

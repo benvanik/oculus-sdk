@@ -16,10 +16,11 @@ otherwise accompanies this software in either electronic or hard copy form.
 #include "OVR_Win32_DeviceManager.h"
 
 // Sensor & HMD Factories
-#include "OVR_Win32_Sensor.h"
-#include "OVR_Win32_LatencyTest.h"
+#include "OVR_SensorImpl.h"
+#include "OVR_LatencyTestImpl.h"
 #include "OVR_Win32_HMDDevice.h"
 #include "OVR_Win32_DeviceStatus.h"
+#include "OVR_Win32_HIDDevice.h"
 
 #include "Kernel/OVR_Timer.h"
 #include "Kernel/OVR_Std.h"
@@ -35,6 +36,7 @@ namespace OVR { namespace Win32 {
 
 DeviceManager::DeviceManager()
 {
+    HidDeviceManager = *HIDDeviceManager::CreateInternal(this);
 }
 
 DeviceManager::~DeviceManager()
@@ -245,7 +247,6 @@ bool DeviceManagerThread::RemoveOverlappedEvent(Notifier* notify, HANDLE hevent)
     return false;
 }
 
-
 bool DeviceManagerThread::AddTicksNotifier(Notifier* notify)
 {
      TicksNotifiers.PushBack(notify);
@@ -284,7 +285,7 @@ bool DeviceManagerThread::RemoveMessageNotifier(Notifier* notify)
 	return false;
 }
 
-void DeviceManagerThread::OnMessage(MessageType type, const String& devicePath)
+bool DeviceManagerThread::OnMessage(MessageType type, const String& devicePath)
 {
 	Notifier::DeviceMessageType notifierMessageType = Notifier::DeviceMessage_DeviceAdded;
 	if (type == DeviceAdded)
@@ -299,14 +300,18 @@ void DeviceManagerThread::OnMessage(MessageType type, const String& devicePath)
 		OVR_ASSERT(false);
 	}
 
+	bool error = false;
 	for (UPInt i = 0; i < MessageNotifiers.GetSize(); i++)
     {
-		if (MessageNotifiers[i] && MessageNotifiers[i]->OnDeviceMessage(notifierMessageType, devicePath))
+		if (MessageNotifiers[i] && 
+			MessageNotifiers[i]->OnDeviceMessage(notifierMessageType, devicePath, &error))
 		{
 			// The notifier belonged to a device with the specified device name so we're done.
 			break;
 		}
     }
+
+	return !error;
 }
 
 } // namespace Win32
@@ -334,9 +339,9 @@ DeviceManager* DeviceManager::Create()
     {
         if (manager->Initialize(0))
         {            
+            manager->AddFactory(&SensorDeviceFactory::Instance);
+            manager->AddFactory(&LatencyTestDeviceFactory::Instance);
             manager->AddFactory(&Win32::HMDDeviceFactory::Instance);
-            manager->AddFactory(&Win32::SensorDeviceFactory::Instance);
-            manager->AddFactory(&Win32::LatencyTestDeviceFactory::Instance);            
 
             manager->AddRef();
         }

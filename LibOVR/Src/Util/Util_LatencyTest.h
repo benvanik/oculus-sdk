@@ -79,6 +79,7 @@ private:
         LatencyTest_ProcessInputs,
     };
     
+    UInt32 getRandomComponent(UInt32 range);
     void handleMessage(const Message& msg, LatencyTestMessageType latencyTestMessage = LatencyTest_None);
     void reset();
     void setTimer(UInt32 timeMilliS);

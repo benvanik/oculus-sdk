@@ -308,37 +308,127 @@ Model* Model::CreateBox(Color c, Vector3f origin, Vector3f size)
     return box;
 }
 
-Model* Model::CreateCylinder(Color c, Vector3f origin, float height, float radius, int sides)
+// Triangulation of a cylinder centered at the origin
+Model* Model::CreateCylinder(Color color, Vector3f origin, float height, float radius, int sides)
 {
     Model *cyl = new Model();
     float halfht = height * 0.5f;
     for(UInt16 i = 0; i < sides; i++)
     {
-        float x = cosf(3.1415926536f * 2.0f * i / float(sides));
-        float y = sinf(3.1415926536f * 2.0f * i / float(sides));
-        cyl->AddVertex(radius * x, radius * y, -halfht, c, x + 1, y, 0, 0, -1);
-        cyl->AddVertex(radius * x, radius * y,  halfht, c, x, y,   0, 0, 1);
+        float x = cosf(Math<float>::TwoPi * i / float(sides));
+        float y = sinf(Math<float>::TwoPi * i / float(sides));
+
+        cyl->AddVertex(radius * x, radius * y, halfht, color, x + 1, y, 0, 0, 1);
+        cyl->AddVertex(radius * x, radius * y, -1.0f*halfht, color, x, y, 0, 0, -1);
 
         UInt16 j = 0;
         if(i < sides - 1)
         {
             j = i + 1;
-            cyl->AddTriangle(0,     i * 4,   i * 4 + 4);
-            cyl->AddTriangle(i * 4 + 5, i * 4 + 1, 1);
+            cyl->AddTriangle(0, i * 4 + 4, i * 4);
+            cyl->AddTriangle(1, i * 4 + 1, i * 4 + 5);
         }
 
-        float nx = cosf(3.1415926536f * (0.5f + 2.0f * i / float(sides)));
-        float ny = sinf(3.1415926536f * (0.5f + 2.0f * i / float(sides)));
-        cyl->AddVertex(radius * x, radius * y, -halfht, c, x + 1, y, nx, ny, 0);
-        cyl->AddVertex(radius * x, radius * y,  halfht, c, x, y,   nx, ny, 0);
+        float nx = cosf(Math<float>::Pi * (0.5f + 2.0f * i / float(sides)));
+        float ny = sinf(Math<float>::Pi * (0.5f + 2.0f * i / float(sides)));
+        cyl->AddVertex(radius * x, radius * y, halfht, color, x + 1, y, nx, ny, 0);
+        cyl->AddVertex(radius * x, radius * y, -1.0f*halfht, color, x, y, nx, ny, 0);
 
-        cyl->AddTriangle(j * 4 + 2, i * 4 + 3, i * 4 + 3);
-        cyl->AddTriangle(i * 4 + 3, j * 4 + 2, j * 4 + 2);
+        cyl->AddTriangle(i * 4 + 2, j * 4 + 2, i * 4 + 3);
+        cyl->AddTriangle(i * 4 + 3, j * 4 + 2, j * 4 + 3);
     }
-
     cyl->SetPosition(origin);
     return cyl;
-}
+};
+
+//Triangulation of a cone centered at the origin
+Model* Model::CreateCone(Color color, Vector3f origin, float height, float radius, int sides)
+{
+    Model *cone = new Model();
+    float halfht = height * 0.5f;
+    cone->AddVertex(0.0f, 0.0f, -1.0f*halfht, color, 0, 0, 0, 0, -1);
+
+    for(UInt16 i = 0; i < sides; i++)
+    {
+        float x = cosf(Math<float>::TwoPi * i / float(sides));
+        float y = sinf(Math<float>::TwoPi * i / float(sides));
+
+        cone->AddVertex(radius * x, radius * y, -1.0f*halfht, color, 0, 0, 0, 0, -1);
+
+        UInt16 j = 1;
+        if(i < sides - 1)
+        {
+            j = i + 1;
+        }
+
+        float next_x = cosf(Math<float>::TwoPi * j / float(sides));
+        float next_y = sinf(Math<float>::TwoPi *  j / float(sides));
+
+        Vector3f normal = Vector3f(x, y, -halfht).Cross(Vector3f(next_x, next_y, -halfht));
+
+        cone->AddVertex(0.0f, 0.0f, halfht, color, 1, 0, normal.x, normal.y, normal.z); 
+        cone->AddVertex(radius * x, radius * y, -1.0f*halfht, color, 0, 0, normal.x, normal.y, normal.z);
+
+        cone->AddTriangle(0, 3*i + 1, 3*j + 1);
+        cone->AddTriangle(3*i + 2, 3*j + 3, 3*i + 3);
+    }
+    cone->SetPosition(origin);
+    return cone;
+};
+
+//Triangulation of a sphere centered at the origin
+Model* Model::CreateSphere(Color color, Vector3f origin, float radius, int sides)
+{
+    Model *sphere = new Model();
+    UInt16 usides = (UInt16) sides;
+    UInt16 halfsides = usides/2;
+
+    for(UInt16 k = 0; k < halfsides; k++) {
+
+        float z = cosf(Math<float>::Pi * k / float(halfsides));
+        float z_r = sinf(Math<float>::Pi * k / float(halfsides)); // the radius of the cross circle with coordinate z
+
+        if (k == 0)  
+        {       // add north and south poles
+               sphere->AddVertex(0.0f, 0.0f, radius, color, 0, 0, 0, 0, 1);
+               sphere->AddVertex(0.0f, 0.0f, -radius, color, 1, 1, 0, 0, -1);
+        }
+        else 
+        {
+            for(UInt16 i = 0; i < sides; i++)
+            {
+                float x = cosf(Math<float>::TwoPi * i / float(sides)) * z_r;
+                float y = sinf(Math<float>::TwoPi * i / float(sides)) * z_r;
+            
+                UInt16 j = 0;
+                if(i < sides - 1)
+                {
+                    j = i + 1;
+                }
+
+                sphere->AddVertex(radius * x, radius * y, radius * z, color, 0, 1, x, y, z);
+
+                UInt16 indi = 2 + (k -1)*usides + i;
+                UInt16 indj = 2 + (k -1)*usides + j;
+                if (k == 1) // NorthPole
+                    sphere->AddTriangle(0, j + 2, i + 2);
+                else if (k == halfsides - 1)  //SouthPole
+                {
+                    sphere->AddTriangle(1, indi, indj);
+                    sphere->AddTriangle(indi, indi - usides, indj);
+                    sphere->AddTriangle(indi - usides, indj - usides, indj);
+                }
+                else
+                {
+                    sphere->AddTriangle(indi, indi - usides, indj);
+                    sphere->AddTriangle(indi - usides, indj - usides, indj);
+                }
+            }
+        } // end else
+    }
+    sphere->SetPosition(origin);
+    return sphere;
+};
 
 Model* Model::CreateGrid(Vector3f origin, Vector3f stepx, Vector3f stepy,
                          int halfx, int halfy, int nmajor, Color minor, Color major)
@@ -402,8 +492,10 @@ RenderDevice::RenderDevice()
       
       Distortion(1.0f, 0.18f, 0.115f),            
       DistortionClearColor(0, 0, 0),
+      PostProcessShaderActive(PostProcessShader_DistortionAndChromAb),
       TotalTextureMemoryUsage(0)
 {
+    PostProcessShaderRequested = PostProcessShaderActive;
 }
 
 Fill* RenderDevice::CreateTextureFill(Render::Texture* t, bool useAlpha)
@@ -638,6 +730,36 @@ bool RenderDevice::initPostProcessSupport(PostProcessType pptype)
         return true;
     }
 
+
+    if (PostProcessShaderRequested !=  PostProcessShaderActive)
+    {
+        pPostProcessShader.Clear();
+        PostProcessShaderActive = PostProcessShaderRequested;
+    }
+
+    if (!pPostProcessShader)
+    {
+        Shader *vs   = LoadBuiltinShader(Shader_Vertex, VShader_PostProcess);
+
+        Shader *ppfs = NULL;
+
+        if (PostProcessShaderActive == PostProcessShader_Distortion)
+        {
+            ppfs = LoadBuiltinShader(Shader_Fragment, FShader_PostProcess);
+        }
+        else if (PostProcessShaderActive == PostProcessShader_DistortionAndChromAb)
+        {
+            ppfs = LoadBuiltinShader(Shader_Fragment, FShader_PostProcessWithChromAb);
+        }
+        else
+            OVR_ASSERT(false);
+    
+        pPostProcessShader = *CreateShaderSet();
+        pPostProcessShader->SetShader(vs);
+        pPostProcessShader->SetShader(ppfs);
+    }
+
+
     int texw = (int)ceil(SceneRenderScale * WindowWidth),
         texh = (int)ceil(SceneRenderScale * WindowHeight);
 
@@ -658,15 +780,7 @@ bool RenderDevice::initPostProcessSupport(PostProcessType pptype)
     SceneColorTexH = texh;
     pSceneColorTex->SetSampleMode(Sample_ClampBorder | Sample_Linear);
 
-    if (!pPostProcessShader)
-    {
-    Shader *vs   = LoadBuiltinShader(Shader_Vertex, VShader_PostProcess);
-    Shader *ppfs = LoadBuiltinShader(Shader_Fragment, FShader_PostProcess);
-    pPostProcessShader = *CreateShaderSet();
-    pPostProcessShader->SetShader(vs);
-    pPostProcessShader->SetShader(ppfs);
-    }
-
+    
     if(!pFullScreenVertexBuffer)
     {
         pFullScreenVertexBuffer = *CreateBuffer();
@@ -760,6 +874,16 @@ void RenderDevice::FinishScene1()
 
     pPostProcessShader->SetUniform4f("HmdWarpParam",
                                      Distortion.K[0], Distortion.K[1], Distortion.K[2], Distortion.K[3]);
+
+    if (PostProcessShaderRequested == PostProcessShader_DistortionAndChromAb)
+    {
+        pPostProcessShader->SetUniform4f("ChromAbParam",
+                                        Distortion.ChromaticAberration[0], 
+                                        Distortion.ChromaticAberration[1],
+                                        Distortion.ChromaticAberration[2],
+                                        Distortion.ChromaticAberration[3]);
+    }
+
     Matrix4f texm(w, 0, 0, x,
                   0, h, 0, y,
                   0, 0, 0, 0,
@@ -773,7 +897,7 @@ void RenderDevice::FinishScene1()
 
     ShaderFill fill(pPostProcessShader);
     fill.SetTexture(0, pSceneColorTex);
-    Render(&fill, pFullScreenVertexBuffer, NULL, view, 0, 4, Prim_TriangleStrip);
+    RenderWithAlpha(&fill, pFullScreenVertexBuffer, NULL, view, 0, 4, Prim_TriangleStrip);
 }
 
 bool CollisionModel::TestPoint(const Vector3f& p) const

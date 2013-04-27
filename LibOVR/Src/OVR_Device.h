@@ -20,6 +20,7 @@ otherwise accompanies this software in either electronic or hard copy form.
 #include "OVR_DeviceConstants.h"
 #include "OVR_DeviceHandle.h"
 #include "OVR_DeviceMessages.h"
+#include "OVR_HIDDeviceBase.h"
 
 #include "Kernel/OVR_Atomic.h"
 #include "Kernel/OVR_RefCount.h"
@@ -250,7 +251,7 @@ public:
     // End users should call DeumerateDevices<>() instead.
     virtual DeviceEnumerator<> EnumerateDevicesEx(const DeviceEnumerationArgs& args) = 0;
 
-    
+
     // Creates a new DeviceManager. Only one instance of DeviceManager should be created at a time.
     static   DeviceManager* Create();
 
@@ -316,6 +317,8 @@ public:
     // the corresponding location after distortion.
     float     DistortionK[4];
 
+    float     ChromaAbCorrection[4];
+
     // Desktop coordinate position of the screen (can be negative; may not be present on all platforms)
     int       DesktopX, DesktopY;
     
@@ -336,6 +339,9 @@ public:
     {
         DisplayDeviceName[0] = 0;
         memset(DistortionK, 0, sizeof(DistortionK));
+        DistortionK[0] = 1;
+        ChromaAbCorrection[0] = ChromaAbCorrection[2] = 1;
+        ChromaAbCorrection[1] = ChromaAbCorrection[3] = 0;
     }
 
     // Operator = copies local fields only (base class must be correct already)
@@ -353,6 +359,10 @@ public:
         DistortionK[1]          = src.DistortionK[1];
         DistortionK[2]          = src.DistortionK[2];
         DistortionK[3]          = src.DistortionK[3];
+        ChromaAbCorrection[0]   = src.ChromaAbCorrection[0];
+        ChromaAbCorrection[1]   = src.ChromaAbCorrection[1];
+        ChromaAbCorrection[2]   = src.ChromaAbCorrection[2];
+        ChromaAbCorrection[3]   = src.ChromaAbCorrection[3];
         DesktopX                = src.DesktopX;
         DesktopY                = src.DesktopY;
         memcpy(DisplayDeviceName, src.DisplayDeviceName, sizeof(DisplayDeviceName));
@@ -445,7 +455,7 @@ private:
 //
 // TBD: Add Polling API? More HID interfaces?
 
-class SensorDevice : public DeviceBase
+class SensorDevice : public HIDDeviceBase, public DeviceBase
 {
 public:
     SensorDevice() 
@@ -481,26 +491,6 @@ public:
     // Return the current sensor range settings for the device. These may not exactly
     // match the values applied through SetRange.
     virtual void       GetRange(SensorRange* range) const = 0;
-
-
-    // Sets a feature on a sensor, in HW-Specific format, enabling HW control.
-    // SetFeature actually takes place on the background thread, so the arguments 
-    // are interpreted as follows:
-    //   data, size - A pointer to command buffer being written. First byte is usually
-    //                the HID ReportID for the device.
-    //   wait       - Specifies whether the function should wait for write to
-    //                complete (true) or just enqueue the write request (false),
-    //                which is much faster.
-    //                Waiting will force background background thread sync.
-    // Returns 0 for failure, or number of bytes written if waitflag == true.
-    // For waitFlag == false, returns 'size' if the command was successfully enqueued.
-    virtual bool        SetFeature(UByte* data, UPInt size, bool waitFlag) = 0;
-
-    // Get feature from HW. First byte of data must contain feature HID ReportID.
-    //
-    virtual bool        GetFeature(UByte* data, UPInt size) = 0;
-
-    //virtual UPInt WriteCommand(UByte* data, UPInt size, bool waitFlag) = 0;
 };
 
 //-------------------------------------------------------------------------------------
@@ -564,9 +554,9 @@ struct LatencyTestDisplay
 
 //-------------------------------------------------------------------------------------
 // ***** LatencyTestDevice
-// LatencyTestDevice represents the Oculus Latency Tester device used to test round trip latency.
-//
-class LatencyTestDevice : public DeviceBase
+
+// LatencyTestDevice provides an interface to the Oculus Latency Tester which is used to test 'motion to photon' latency.
+class LatencyTestDevice : public HIDDeviceBase, public DeviceBase
 {
 public:
     LatencyTestDevice()
@@ -575,12 +565,28 @@ public:
     // Static constant for this device type, used in template cast type checks.
     enum { EnumDeviceType = Device_LatencyTester };
 
-    virtual DeviceType GetType() const   { return Device_LatencyTester; }
+    virtual DeviceType GetType() const { return Device_LatencyTester; }
 
-    virtual bool       SetConfiguration(const LatencyTestConfiguration& configuration, bool waitFlag = false) = 0;
-    virtual bool       SetCalibrate(const LatencyTestCalibrate& calibrate, bool waitFlag = false) = 0;
-    virtual bool       SetStartTest(const LatencyTestStartTest& start, bool waitFlag = false) = 0;
-    virtual bool       SetDisplay(const LatencyTestDisplay& display, bool waitFlag = false) = 0;
+    // Specifies configuration information including the threshold for triggering a detected color change,
+    // and a flag to enable a stream of sensor values (typically used for debugging).
+    virtual bool SetConfiguration(const LatencyTestConfiguration& configuration, bool waitFlag = false) = 0;
+
+    // Get configuration information from device.
+    virtual bool GetConfiguration(LatencyTestConfiguration* configuration) = 0;
+
+    // Used to calibrate the latency tester at the start of a test. Calibration information is lost
+    // when power is removed from the device.
+    virtual bool SetCalibrate(const LatencyTestCalibrate& calibrate, bool waitFlag = false) = 0;
+
+    // Get calibration information from device.
+    virtual bool GetCalibrate(LatencyTestCalibrate* calibrate) = 0;
+
+    // Triggers the start of a measurement. This starts the millisecond timer on the device and 
+    // causes it to respond with the 'MessageLatencyTestStarted' message.
+    virtual bool SetStartTest(const LatencyTestStartTest& start, bool waitFlag = false) = 0;
+
+    // Used to set the value displayed on the LED display panel.
+    virtual bool SetDisplay(const LatencyTestDisplay& display, bool waitFlag = false) = 0;
 };
 
 } // namespace OVR
